@@ -4,7 +4,7 @@ Bubble Popper is a simple browser-based game built with p5.js. The objective of 
 
 ## Demo
 
-[Link to Live Demo](https://your-demo-link.com)
+[Bubble Popper Live Demo](https://toluolagunju.tech/bubble_pop)
 
 ![Bubble Popper Demo](demo.gif)
 
