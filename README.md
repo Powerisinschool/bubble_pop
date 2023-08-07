@@ -27,7 +27,7 @@ To play the game, you need a modern web browser with JavaScript enabled.
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/your-username/bubble-popper.git
+git clone https://github.com/Powerisinschool/bubble-pop.git
 ```
 
 2. Open the `index.html` file in your web browser.
