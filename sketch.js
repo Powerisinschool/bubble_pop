@@ -1,6 +1,7 @@
 var currentState;
 var gameState;
 const bubbles = [];
+const particles = [];
 var score = 0;
 var timeLeft = 60;
 var fr = 60;
@@ -10,6 +11,51 @@ var restartButton;
 var cursorStyle;
 var loadingSpinner;
 var loadingMessage = "Preparing the game...";
+var popSound;
+var gameOverSound;
+var backgroundMusic;
+
+const specialBubbleTypes = {
+  normal: "NORMAL",
+  bouncing: "BOUNCING",
+  fast: "FAST",
+};
+
+class Particle {
+  constructor(x, y, c) {
+    this.x = x;
+    this.y = y;
+    this.c = c || color(51, 170, 255);
+    this.velocity = p5.Vector.random2D().mult(random(1, 2)); // Random velocity
+    this.acceleration = createVector(0, 0.05); // Gravity-like acceleration
+    this.lifespan = 255; // Particle lifespan
+  }
+
+  update() {
+    this.velocity.add(this.acceleration);
+    this.x += this.velocity.x;
+    this.y += this.velocity.y;
+    this.lifespan -= 5;
+  }
+
+  display() {
+    noStroke();
+    this.c.setAlpha(this.lifespan);
+    fill(this.c);
+    ellipse(this.x, this.y, 5);
+  }
+
+  isFinished() {
+    return this.lifespan <= 0;
+  }
+}
+
+function preload() {
+    soundFormats('mp3', 'ogg');
+    popSound = loadSound("sound_effects/pop.mp3");
+    gameOverSound = loadSound("sound_effects/game_over.mp3");
+    backgroundMusic = loadSound("sound_effects/background_music.mp3");
+}
 
 function setup()
 {
@@ -65,12 +111,14 @@ function draw()
             drawBubbles();
             moveBubbles();
             updateTime();
-            displayScore();
+            displayScores();
             displayTimer();
+            drawParticles(); // Draw the particle explosion animation
             cursorStyle = "default";
             break;
         case gameState.paused:
             drawBubbles();
+            drawParticles();
             textAlign(CENTER);
             text("Click anywhere to resume", width/2, height/2);
             cursorStyle = "pointer";
@@ -79,6 +127,7 @@ function draw()
             endGame();
             break;
         case gameState.gameOver:
+            drawParticles();
             endGame();
             break;
         default:
@@ -101,7 +150,7 @@ function gameLoadingScreen() {
 
     setTimeout(() => {
         currentState = gameState.start;
-    }, 3000)
+    }, 500)
 }
 
 function mouseClicked() {
@@ -116,6 +165,14 @@ function mouseClicked() {
                     if (distance < bubble.radius) {
                         if (bubble.state) {
                             score += bubble.score;
+                            
+                            popSound.play();
+                            
+                            // Add particles for explosion animation
+                            for (let i = 0; i < 10; i++) {
+                                particles.push(new Particle(bubble.x, bubble.y));
+                            }
+
                             bubbles.splice(index, 1);
                         } else {
                             currentState = gameState.gameOver;
@@ -136,22 +193,36 @@ function mouseClicked() {
     }
 }
 
+// Display particles for explosion animation
+function drawParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    particles[i].update();
+    particles[i].display();
+    if (particles[i].isFinished()) {
+      particles.splice(i, 1);
+    }
+  }
+}
+
 // Start the game
 function startGame() {
     currentState = gameState.playing;
+    backgroundMusic.loop();
 }
 
 function endGame() {
+    bubbles.forEach((bubble) => {
+        for (let i = 0; i < 10; i++) {
+            particles.push(new Particle(bubble.x, bubble.y, bubble.state ? color(51, 170, 255) : color(255, 170, 51)));
+        }
+    })
+    bubbles.length = 0;
     currentState = gameState.gameOver;
     
-    var highScore = localStorage.getItem("highScore") || 0;
-    if (score > highScore) {
-        localStorage.setItem("highScore", score);
-        highScore = score;
-    }
+    updateHighScore();
     
     textAlign(CENTER);
-    text("High Score: " + highScore, width/2, height/2 + 50);
+    text("High Score: " + getHighScore(), width/2, height/2 + 50);
 
     // Create a restart button
     restartButton.position(width / 2 - 50, height / 2);
@@ -174,9 +245,24 @@ function updateTime() {
 
 function moveBubbles() {
     bubbles.forEach((bubble, index) => {
-        bubble.y -= 2; // Adjust the speed of the bubbles
+        if (bubble.type === specialBubbleTypes.bouncing) {
+            // Handle bouncing bubble behavior
+            bubble.x += bubble.velocityX;
+            bubble.y += bubble.velocityY;
+
+            if (bubble.x + bubble.radius > width || bubble.x - bubble.radius < 0) {
+                bubble.velocityX *= -1;
+            }
+            if (bubble.y + bubble.radius > height || bubble.y - bubble.radius < 0) {
+                bubble.velocityY *= -1;
+            }
+        } else {
+            // Normal bubble behavior
+            bubble.y -= bubble.velocity;
+        }
+
         if (bubble.y + bubble.radius < 0) {
-            bubbles.splice(index, 1); // Remove bubbles that are off the screen
+            bubbles.splice(index, 1);
         }
     });
 }
@@ -195,12 +281,25 @@ function drawBubbles() {
 // Spawn bubbles
 function spawnBubbles() {
     if (currentState === gameState.playing && millis() - lastSpawnTime > bubbleSpawnInterval - max(frameCount, 1000)) {
+        const type = random() > 0.1 ? specialBubbleTypes.normal : random(Object.values(specialBubbleTypes));
+        let velocityX = random(-2, 2);
+        let velocityY = random(-2, 2);
+
+        if (type === specialBubbleTypes.fast) {
+          velocityX *= 2;
+          velocityY *= 2;
+        }
         const bubble = {
             x: random(20, width - 20),
             y: height,
             radius: random(10, 30),
             score: round(random(0, 10)) + 1,
-            state: random() > 0.1 ? 1 : 0,
+//            state: random() > 0.1 ? 1 : 0,
+            state: type !== specialBubbleTypes.normal,
+            type: type,
+            velocity: type === specialBubbleTypes.fast ? 4 : 2,
+            velocityX: velocityX,
+            velocityY: velocityY,
         };
         bubbles.push(bubble);
         lastSpawnTime = millis(); // Update the last spawn time
@@ -219,11 +318,25 @@ function resetGame() {
     startGame();
 }
 
-function displayScore() {
-    fill(255);
-    textSize(18);
-    textAlign(LEFT);
-    text('Score: ' + score, 20, 30);
+function displayScores() {
+  textSize(20);
+  textAlign(LEFT);
+  fill(255);
+  text(`Score: ${score}`, 20, 30);
+  text(`High Score: ${getHighScore()}`, 20, 60);
+}
+
+// Update high score in localStorage
+function updateHighScore() {
+  const currentHighScore = getHighScore();
+  if (score > currentHighScore) {
+    localStorage.setItem("highScore", score);
+  }
+}
+
+// Get high score from localStorage
+function getHighScore() {
+  return parseInt(localStorage.getItem("highScore")) || 0;
 }
 
 function displayTimer() {
